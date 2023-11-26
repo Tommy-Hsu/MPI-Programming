@@ -25,14 +25,13 @@ int main(int argc, char **argv)
     // every rank has 
     long long int tosses_per_rank = tosses / (world_size);
     long long int tosses_per_rank_rest = tosses % (world_size);
-    long long int hits_per_rank_array[world_size] = {0};
-    long long int nhits = 0;
+    // long long int hits_per_rank_array[world_size] = {0};
+    long long int nHits = 0;
 
     if (world_rank > 0)
     {
         // TODO: handle workers
         unsigned int seed = (unsigned int)time(NULL) + (unsigned long)pthread_self();
-        long long int nHits = 0;
         for( long long int i = 0; i < tosses_per_rank; i++ ) {
             double x = (double)rand_r(&seed) / (double)RAND_MAX;
             double y = (double)rand_r(&seed) / (double)RAND_MAX;
@@ -51,10 +50,10 @@ int main(int argc, char **argv)
             double x = (double)rand_r(&seed) / (double)RAND_MAX;
             double y = (double)rand_r(&seed) / (double)RAND_MAX;
             if ( x*x + y*y <= 1.f ) {
-                nhits++;
+                nHits++;
             }
         }
-        printf("rank %d, nhits %lld\n", world_rank, nhits);
+        printf("rank %d, nHits %lld\n", world_rank, nHits);
     }
 
     if (world_rank == 0)
@@ -63,11 +62,12 @@ int main(int argc, char **argv)
         pi_result = 0.0;
         for(int i = 1; i < world_size; i++)
         {
-            MPI_Recv(&hits_per_rank_array[i], 1, MPI_LONG_LONG_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            printf("hits_per_rank_array[%d] = %lld\n", i, hits_per_rank_array[i]);
-            nhits += hits_per_rank_array[i];
+            long long int recv_nHits;
+            MPI_Recv(&recv_nHits, 1, MPI_LONG_LONG_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            printf("recv_nHits %d = %lld\n", i, recv_nHits);
+            nHits += recv_nHits;
         }
-        pi_result = 4.0 * static_cast<double>(nhits) /static_cast<double>(tosses);
+        pi_result = 4.0 * static_cast<double>(nHits) /static_cast<double>(tosses);
 
         // --- DON'T TOUCH ---
         double end_time = MPI_Wtime();
