@@ -37,37 +37,34 @@ void construct_matrices(int *n_ptr, int *m_ptr, int *l_ptr, int **a_mat_ptr, int
         int averow = *n_ptr/numworkers;
         int extra = *n_ptr%numworkers;
         mtype = FROM_MASTER;
-        MPI_Request MPI_request[4 * numworkers];
 
         for (int dest=1; dest<=numworkers; dest++)
         {
             rows = (dest <= extra) ? averow+1 : averow;
             MPI_Send(&offset, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
             MPI_Send(&rows, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
-            MPI_Send(&(*a_mat_ptr)[offset], rows*(*m_ptr), MPI_INT, dest, mtype, MPI_COMM_WORLD);
-            MPI_Send(&(*b_mat_ptr), (*m_ptr)*(*l_ptr), MPI_INT, dest, mtype, MPI_COMM_WORLD);
-            printf("Sent %d a_mat and %d b_mat to task %d \n", rows*(*m_ptr), (*m_ptr)*(*l_ptr), dest);
+            MPI_Send(&(*a_mat_ptr)[offset * (*m_ptr)], rows*(*m_ptr), MPI_INT, dest, mtype, MPI_COMM_WORLD);
+            MPI_Send((*b_mat_ptr), (*m_ptr)*(*l_ptr), MPI_INT, dest, mtype, MPI_COMM_WORLD);
+            printf("Sent %d rows to task %d offset=%d\n",rows,dest,offset);
             offset = offset + rows;
         }
     }
     else{
         mtype = FROM_MASTER;
         MPI_Status MPI_status[4];
-        printf("%d", world_rank);
         MPI_Recv(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &MPI_status[0]);
         MPI_Recv(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &MPI_status[1]);
         *a_mat_ptr = new int[rows  * *m_ptr];
         *b_mat_ptr = new int[*m_ptr * *l_ptr];
-        MPI_Recv(&(*a_mat_ptr)[offset], rows * (*m_ptr), MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &MPI_status[2]);
-        MPI_Recv(&(*b_mat_ptr), (*m_ptr) * (*l_ptr), MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &MPI_status[3]);
-        printf("Received %d a_mat and %d b_mat from task %d\n", rows*(*m_ptr), (*m_ptr)*(*l_ptr), MASTER);
+        MPI_Recv((*a_mat_ptr), rows * (*m_ptr), MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &MPI_status[2]);
+        MPI_Recv((*b_mat_ptr), (*m_ptr) * (*l_ptr), MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &MPI_status[3]);
+        printf("Rank %d Received %d rows from task %d offset=%d\n",world_rank, rows, MASTER, offset);
     }
 }
 
 void matrix_multiply(const int n, const int m, const int l, const int *a_mat, const int *b_mat) {
     
     int world_rank, world_size;
-    MPI_Status MPI_status[4];
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     int numworkers = world_size - 1;
@@ -81,52 +78,57 @@ void matrix_multiply(const int n, const int m, const int l, const int *a_mat, co
         /* Receive results from worker tasks */
         int* c_mat = new int[n * l];
         mtype = FROM_WORKER;
+        
         for (int i=1; i<=numworkers; i++)
         {
             source = i;
-            // MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
-            // MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
-            // MPI_Recv(&c[offset], rows*l, MPI_INT, source, mtype, MPI_COMM_WORLD, &status);
-            // printf("Received results from task %d\n",source);
+            MPI_Status MPI_status[3];
+            MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &MPI_status[0]);
+            MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &MPI_status[1]);
+            MPI_Recv(&c_mat[offset], rows*l, MPI_INT, source, mtype, MPI_COMM_WORLD, &MPI_status[2]);
+            printf("Received results from task %d\n",source);
         }
 
         /* Print results */
-        // for(int i = 0; i < n; i++){
-        //     for(int j = 0; j < l; j++){
-        //         std::cout << c_mat[i * l + j] << " ";
-        //     }
-        //     std::cout << std::endl;
-        // }
+        for(int i = 0; i < n; i++){
+            for(int j = 0; j < l; j++){
+                std::cout << c_mat[i * l + j] << " ";
+            }
+            std::cout << std::endl;
+        }
 
         delete[] c_mat;
     }
     else{
 
-        /* display a_mat and b_mat */
-        for(int i = 0; i < n; i++){
-            for(int j = 0; j < m; j++){
-                std::cout << a_mat[i * m + j] << " ";
+        int averow = n/numworkers;
+        int extra = n%numworkers;
+
+        for (int dest=1; dest<=world_rank; dest++)
+        {
+            rows = (dest <= extra) ? averow+1 : averow;
+            offset = offset + rows;
+        }
+        
+        /* Perform matrix multiplication */
+        int *c_mat = new int[rows * l];
+        for(int i = 0; i < rows; i++){
+            for(int j = 0; j < l; j++){
+                c_mat[i * l + j] = 0;
+                for(int k = 0; k < m; k++){
+                    c_mat[i * l + j] += a_mat[i * m + k] * b_mat[k * l + j];
+                }
             }
-            std::cout << std::endl;
         }
 
-        /* Perform matrix multiplication */
-        // int *c_mat = new int[rows * l];
-        // for(int i = 0; i < rows; i++){
-        //     for(int j = 0; j < l; j++){
-        //         c_mat[i * l + j] = 0;
-        //         for(int k = 0; k < m; k++){
-        //             c_mat[i * l + j] += a[i * m + k] * b[k * l + j];
-        //         }
-        //     }
-        // }
-
-        // mtype = FROM_WORKER;
-        // MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
-        // MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+        mtype = FROM_WORKER;
+        MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+        MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+        MPI_Send(c_mat, rows*l, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
         // MPI_Send(&c_mat, rows*l, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
+        printf("Sent results from task %d\n",world_rank);
 
-        // delete[] c_mat;
+        delete[] c_mat;
     }
 }
 
