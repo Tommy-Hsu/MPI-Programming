@@ -4,7 +4,7 @@ CFLAGS=-Wall
 TARGET=matmul
 OBJS=main.o matrix_operations.o
 HOSTFILE=hosts_matrix.txt
-DATAFILE=/home/.grade/HW4/data-set/data1_1
+DATAFILE=/home/.grade/HW4/data-set/data2_10
 # DATAFILE=data0_1
 
 all: $(TARGET)
@@ -23,4 +23,4 @@ clean:
 
 run: $(TARGET)
 	parallel-scp -A -h $(HOSTFILE) $(TARGET) ~
-	mpirun -np 4 --hostfile $(HOSTFILE) ./$(TARGET) < $(DATAFILE) > output.txt
+	mpirun -np 8 --hostfile $(HOSTFILE) ./$(TARGET) < $(DATAFILE) > output.txt

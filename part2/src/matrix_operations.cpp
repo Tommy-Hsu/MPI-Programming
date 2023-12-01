@@ -37,7 +37,8 @@ void construct_matrices(int *n_ptr, int *m_ptr, int *l_ptr, int **a_mat_ptr, int
         int averow = *n_ptr/numworkers;
         int extra = *n_ptr%numworkers;
         mtype = FROM_MASTER;
-
+        
+        // printf("n = %d, m = %d, l = %d\n", *n_ptr, *m_ptr, *l_ptr);
         for (int dest=1; dest<=numworkers; dest++)
         {
             rows = (dest <= extra) ? averow+1 : averow;
@@ -45,7 +46,7 @@ void construct_matrices(int *n_ptr, int *m_ptr, int *l_ptr, int **a_mat_ptr, int
             MPI_Send(&rows, 1, MPI_INT, dest, mtype, MPI_COMM_WORLD);
             MPI_Send(&(*a_mat_ptr)[offset * (*m_ptr)], rows*(*m_ptr), MPI_INT, dest, mtype, MPI_COMM_WORLD);
             MPI_Send((*b_mat_ptr), (*m_ptr)*(*l_ptr), MPI_INT, dest, mtype, MPI_COMM_WORLD);
-            printf("Sent %d rows to task %d offset=%d\n",rows,dest,offset);
+            // printf("Sent %d rows to task %d offset=%d\n",rows,dest,offset);
             offset = offset + rows;
         }
     }
@@ -58,7 +59,7 @@ void construct_matrices(int *n_ptr, int *m_ptr, int *l_ptr, int **a_mat_ptr, int
         *b_mat_ptr = new int[*m_ptr * *l_ptr];
         MPI_Recv((*a_mat_ptr), rows * (*m_ptr), MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &MPI_status[2]);
         MPI_Recv((*b_mat_ptr), (*m_ptr) * (*l_ptr), MPI_INT, MASTER, mtype, MPI_COMM_WORLD, &MPI_status[3]);
-        printf("Rank %d Received %d rows from task %d offset=%d\n",world_rank, rows, MASTER, offset);
+        // printf("Rank %d Received %d rows from task %d offset=%d\n",world_rank, rows, MASTER, offset);
     }
 }
 
@@ -85,8 +86,8 @@ void matrix_multiply(const int n, const int m, const int l, const int *a_mat, co
             MPI_Status MPI_status[3];
             MPI_Recv(&offset, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &MPI_status[0]);
             MPI_Recv(&rows, 1, MPI_INT, source, mtype, MPI_COMM_WORLD, &MPI_status[1]);
-            MPI_Recv(&c_mat[offset], rows*l, MPI_INT, source, mtype, MPI_COMM_WORLD, &MPI_status[2]);
-            printf("Received results from task %d\n",source);
+            MPI_Recv(&c_mat[offset * l], rows*l, MPI_INT, source, mtype, MPI_COMM_WORLD, &MPI_status[2]);
+            // printf("Received results from task %d, offset %d, rows %d \n",source,offset,rows);
         }
 
         /* Print results */
@@ -103,12 +104,14 @@ void matrix_multiply(const int n, const int m, const int l, const int *a_mat, co
 
         int averow = n/numworkers;
         int extra = n%numworkers;
-
+        offset = 0;
+        rows = 0;
         for (int dest=1; dest<=world_rank; dest++)
         {
-            rows = (dest <= extra) ? averow+1 : averow;
             offset = offset + rows;
+            rows = (dest <= extra) ? averow+1 : averow;
         }
+        // printf("Rank %d offset=%d rows=%d\n",world_rank,offset,rows);
         
         /* Perform matrix multiplication */
         int *c_mat = new int[rows * l];
@@ -125,8 +128,6 @@ void matrix_multiply(const int n, const int m, const int l, const int *a_mat, co
         MPI_Send(&offset, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
         MPI_Send(&rows, 1, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
         MPI_Send(c_mat, rows*l, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
-        // MPI_Send(&c_mat, rows*l, MPI_INT, MASTER, mtype, MPI_COMM_WORLD);
-        printf("Sent results from task %d\n",world_rank);
 
         delete[] c_mat;
     }
